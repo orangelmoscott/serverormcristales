@@ -24,10 +24,9 @@ app.use(bodyParser.json());
 
 
 const SECRET_KEY = process.env.SECRET_KEY; // Cambia esto en tu entorno
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-});
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ Conexión a MongoDB exitosa'))
+    .catch(err => console.error('❌ Error crítico al conectar a MongoDB (verifica tu URI o Acceso IP en Atlas):', err.message));
 
 
 
