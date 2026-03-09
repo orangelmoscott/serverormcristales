@@ -12,6 +12,7 @@ const corsOptions = {
     origin: [
         'https://ormcristaleslimpios.vercel.app',
         'https://orangelmoscott.github.io',
+        'https://paneladmin-phi.vercel.app',
         'http://localhost:8080',
         'http://localhost:3000'
     ],
