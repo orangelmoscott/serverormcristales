@@ -7,7 +7,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-app.use(cors());
+// CORS Configuration
+const corsOptions = {
+    origin: [
+        'https://ormcristaleslimpios.vercel.app',
+        'https://orangelmoscott.github.io',
+        'http://localhost:8080',
+        'http://localhost:3000'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 
@@ -62,7 +73,7 @@ app.post('/login', async (req, res) => {
 function authenticate(req, res, next) {
     const token = req.headers.authorization;
     if (!token) return res.status(401).send({ message: 'Acceso denegado' });
-    
+
     try {
         const decoded = jwt.verify(token, SECRET_KEY);
         req.user = decoded;
@@ -81,16 +92,16 @@ app.get('/contacts', authenticate, async (req, res) => {
 // Ruta para crear un nuevo contacto
 app.post('/cliente', async (req, res) => {
     const { name, email, message } = req.body;
-  
+
     try {
-      const newContact = new Contact({ name, email, message });
-      await newContact.save();
-      res.status(201).send({ message: 'Contacto guardado con éxito' });
+        const newContact = new Contact({ name, email, message });
+        await newContact.save();
+        res.status(201).send({ message: 'Contacto guardado con éxito' });
     } catch (error) {
-      res.status(400).send({ message: 'Error al guardar el contacto', error: error.message });
+        res.status(400).send({ message: 'Error al guardar el contacto', error: error.message });
     }
-  });
-  
+});
+
 
 const PORT = process.env.PORT || 3000;;
 app.listen(PORT, () => {
