@@ -265,6 +265,17 @@ app.post('/clients', authenticate, async (req, res) => {
     }
 });
 
+// PUT - Actualizar cliente existente
+app.put('/clients/:id', authenticate, async (req, res) => {
+    try {
+        const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!client) return res.status(404).send({ message: 'Cliente no encontrado' });
+        res.send({ message: 'Cliente actualizado correctamente', client });
+    } catch (error) {
+        res.status(400).send({ message: 'Error al actualizar cliente', error: error.message });
+    }
+});
+
 // DELETE - Eliminar cliente
 app.delete('/clients/:id', authenticate, async (req, res) => {
     try {
