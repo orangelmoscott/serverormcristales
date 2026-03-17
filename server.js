@@ -13,14 +13,7 @@ const app = express();
 // CONFIGURACIÓN
 // ==============================
 const corsOptions = {
-    origin: [
-        'https://ormcristaleslimpios.vercel.app',
-        'https://orangelmoscott.github.io',
-        'https://paneladmin-phi.vercel.app',
-        'https://paneladmin-orangelmoscotts-projects.vercel.app',
-        'http://localhost:8080',
-        'http://localhost:3000'
-    ],
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 };
