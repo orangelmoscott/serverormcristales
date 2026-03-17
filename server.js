@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 
 const app = express();
 
@@ -343,6 +344,97 @@ app.delete('/clients/:id', authenticate, adminOnly, async (req, res) => {
         res.send({ message: 'Cliente eliminado correctamente' });
     } catch (error) {
         res.status(500).send({ message: 'Error al eliminar cliente' });
+    }
+});
+
+app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res) => {
+    try {
+        const client = await Client.findById(req.params.id);
+        if (!client) return res.status(404).send({ message: 'Cliente no encontrado' });
+        if (!client.email) return res.status(400).send({ message: 'El cliente no tiene un email registrado' });
+
+        const base = client.basePrice;
+        const iva = base * 0.21;
+        const total = base + iva;
+        const dateStr = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        const capitalize = s => s && s.charAt(0).toUpperCase() + s.slice(1);
+
+        const htmlContent = `
+        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <div style="background: linear-gradient(135deg, #0ea5e9, #0284c7); padding: 40px 30px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">ORM Cristales</h1>
+                <p style="color: #e0f2fe; margin-top: 8px; font-size: 15px; font-weight: 500;">Limpiezas Industriales y Mantenimiento</p>
+            </div>
+            <div style="padding: 40px 30px;">
+                <h2 style="color: #0f172a; margin-top: 0; font-size: 22px;">¡Hola ${client.companyName}!</h2>
+                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Queremos agradecerte por confiar un mes más en nuestros servicios de limpieza. Adjuntamos el resumen de facturación correspondiente a los servicios realizados este mes de <strong>${capitalize(dateStr)}</strong>.</p>
+                
+                <div style="background: #f8fafc; padding: 25px; border-radius: 12px; margin: 30px 0; border: 1px solid #f1f5f9;">
+                    <h3 style="margin-top: 0; color: #0369a1; border-bottom: 2px solid #e0f2fe; padding-bottom: 12px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Resumen Mensual</h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
+                        <tr>
+                            <td style="padding: 10px 0; color: #64748b;">Concepto:</td>
+                            <td style="padding: 10px 0; text-align: right; font-weight: 600; color: #0f172a;">Limpieza de ${client.serviceType}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; color: #64748b;">Frecuencia:</td>
+                            <td style="padding: 10px 0; text-align: right; font-weight: 600; color: #0f172a; text-transform: capitalize;">${client.frequency}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 5px;">Base Imponible:</td>
+                            <td style="padding: 10px 0; text-align: right; font-weight: 600; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 15px;">${base.toFixed(2)}€</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; color: #64748b;">IVA Aplicado (21%):</td>
+                            <td style="padding: 10px 0; text-align: right; font-weight: 600; color: #0f172a;">${iva.toFixed(2)}€</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 20px 0 5px; color: #0ea5e9; font-weight: 800; font-size: 18px;">TOTAL A PAGAR:</td>
+                            <td style="padding: 20px 0 5px; text-align: right; font-weight: 800; font-size: 20px; color: #0ea5e9;">${total.toFixed(2)}€</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Si tienes cualquier duda sobre la facturación o necesitas la factura en formato oficial PDF, no dudes en contactarnos respondiendo a este correo.</p>
+                
+                <div style="text-align: center; margin-top: 35px;">
+                    <a href="https://orangelmoscott.github.io/ormcristaleslimpios" style="background: #0ea5e9; color: white; text-decoration: none; padding: 14px 30px; border-radius: 999px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);">Visitar nuestra Web</a>
+                </div>
+            </div>
+            
+            <div style="background: #f1f5f9; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <h4 style="color: #0f172a; margin-top: 0; font-size: 16px;">¿Qué te ha parecido nuestro servicio? ⭐⭐⭐⭐⭐</h4>
+                <p style="color: #64748b; font-size: 14px; line-height: 1.6; max-width: 400px; margin: 10px auto 20px;">Nos ayuda enormemente que valores el esfuerzo y dedicación que ponemos en tu negocio dejando una pequeña reseña en Google.</p>
+                <!-- Aquí reemplazar el hipervínculo con el enlace real de Google Reviews -->
+                <a href="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK/review" style="color: #0284c7; text-decoration: none; font-weight: 700; font-size: 15px; background: white; padding: 10px 20px; border-radius: 8px; border: 1px solid #cbd5e1; display: inline-block;">Dejar una reseña en Google</a>
+            </div>
+        </div>
+        `;
+
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            // Modo Demo: Simula el envío exitoso si no hay credenciales (para evitar romper la UI mientras el admin las consigue)
+            console.log("Mock Email Sent to", client.email);
+            return res.status(200).send({ message: 'Envío simulado (Falta configuración SMTP en Servidor). Muestra el diseño.' });
+        }
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail', // Requiere contraseña de aplicación de Google
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+
+        await transporter.sendMail({
+            from: `"ORM Cristales" <${process.env.EMAIL_USER}>`,
+            to: client.email,
+            subject: `Facturación y Resumen Mensual - ORM Cristales`,
+            html: htmlContent
+        });
+
+        res.status(200).send({ message: 'Correo enviado con éxito' });
+    } catch (error) {
+        res.status(500).send({ message: 'Error al enviar el correo', error: error.message });
     }
 });
 
