@@ -143,6 +143,15 @@ function adminOnly(req, res, next) {
     next();
 }
 
+app.get('/fix-roles', async (req, res) => {
+    try {
+        await User.updateMany({}, { role: 'admin' });
+        res.send('Todos los usuarios convertidos a admin.');
+    } catch (e) {
+        res.send(e.message);
+    }
+});
+
 // ==============================
 // RUTAS DE AUTENTICACIÓN
 // ==============================
