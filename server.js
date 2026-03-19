@@ -40,8 +40,8 @@ const EMAIL_PASS = (process.env.EMAIL_PASS || "").trim().replace(/['"]/g, "");
 // Transporter reutilizable para mayor eficiencia
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false, // TLS/STARTTLS para el puerto 587
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
@@ -52,6 +52,7 @@ const transporter = nodemailer.createTransport({
     connectionTimeout: 10000,
     family: 4 // Forzar IPv4 para evitar errores ENETUNREACH en hosts sin soporte IPv6 (como Render)
 });
+
 
 
 // ==============================
