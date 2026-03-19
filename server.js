@@ -150,6 +150,14 @@ const serviceLogSchema = new mongoose.Schema({
 });
 const ServiceLog = mongoose.model('ServiceLog', serviceLogSchema);
 
+// --- Contador para Números de Factura ---
+const counterSchema = new mongoose.Schema({
+    id: { type: String, required: true, unique: true },
+    seq: { type: Number, default: 0 }
+});
+const Counter = mongoose.model('Counter', counterSchema);
+
+
 // ==============================
 // MIDDLEWARES DE AUTENTICACIÓN
 // ==============================
@@ -390,7 +398,16 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
         const dateStr = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
         const capitalize = s => s && s.charAt(0).toUpperCase() + s.slice(1);
 
+        // --- Obtener/Incrementar Número de Factura ---
+        let counter = await Counter.findOneAndUpdate(
+            { id: 'invoice' },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+        );
+        const invoiceNum = counter.seq.toString().padStart(3, '0');
+
         const htmlContent = `
+
         <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
             <div style="background: linear-gradient(135deg, #0ea5e9, #0284c7); padding: 40px 30px; text-align: center;">
                 <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">ORM Cristales</h1>
@@ -398,11 +415,15 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
             </div>
             <div style="padding: 40px 30px;">
                 <h2 style="color: #0f172a; margin-top: 0; font-size: 22px;">¡Hola ${client.companyName}!</h2>
-                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Queremos agradecerte por confiar un mes más en nuestros servicios de limpieza. Adjuntamos el resumen de facturación correspondiente a los servicios realizados este mes de <strong>${capitalize(dateStr)}</strong>.</p>
+                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Queremos agradecerte por confiar un mes más en nuestros servicios de limpieza. <strong>Adjuntamos tu factura oficial en formato PDF</strong> correspondiente a los servicios realizados este mes de <strong>${capitalize(dateStr)}</strong>.</p>
                 
                 <div style="background: #f8fafc; padding: 25px; border-radius: 12px; margin: 30px 0; border: 1px solid #f1f5f9;">
-                    <h3 style="margin-top: 0; color: #0369a1; border-bottom: 2px solid #e0f2fe; padding-bottom: 12px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Resumen Mensual</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e0f2fe; padding-bottom: 12px; margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #0369a1; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Resumen Mensual</h3>
+                        <span style="background: #e0f2fe; color: #0369a1; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 700;">FACTURA #${invoiceNum}</span>
+                    </div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
+
                         <tr>
                             <td style="padding: 10px 0; color: #64748b;">Concepto:</td>
                             <td style="padding: 10px 0; text-align: right; font-weight: 600; color: #0f172a;">Limpieza de ${client.serviceType}</td>
@@ -426,7 +447,8 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
                     </table>
                 </div>
 
-                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Si tienes cualquier duda sobre la facturación o necesitas la factura en formato oficial PDF, no dudes en contactarnos respondiendo a este correo.</p>
+                <p style="color: #475569; line-height: 1.6; font-size: 15px;">Adjuntamos la factura oficial en PDF para tu comodidad. Si tienes cualquier duda sobre la facturación, no dudes en contactarnos respondiendo a este correo.</p>
+
                 
                 <div style="text-align: center; margin-top: 35px;">
                     <a href="https://orangelmoscott.github.io/ormcristaleslimpios" style="background: #0ea5e9; color: white; text-decoration: none; padding: 14px 30px; border-radius: 999px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);">Visitar nuestra Web</a>
@@ -468,7 +490,9 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
             // HEADER / LOGO (Placeholder o Texto)
             doc.fillColor("#0284c7").fontSize(20).text("ORM CRISTALES", { align: 'right' });
             doc.fillColor("#475569").fontSize(10).text("Limpiezas Industriales y Mantenimiento", { align: 'right' });
+            doc.fillColor("#64748b").fontSize(12).text(`Factura Nº: ${invoiceNum}`, { align: 'right' });
             doc.moveDown();
+
 
             // INFO VENDEDOR / CLIENTE
             doc.fillColor("#0f172a").fontSize(12).text("DATOS DE LA EMPRESA:", { underline: true });
@@ -518,15 +542,16 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
             await transporter.sendMail({
                 from: `"ORM Cristales" <${EMAIL_USER}>`,
                 to: client.email,
-                subject: `Factura ${capitalize(dateStr)} - ORM Cristales`,
+                subject: `Factura #${invoiceNum} - ${capitalize(dateStr)} - ORM Cristales`,
                 html: htmlContent,
                 attachments: [
                     {
-                        filename: `Factura_ORM_${client.companyName.replace(/\s+/g, '_')}_${dateStr.replace(/\s+/g, '_')}.pdf`,
+                        filename: `Factura_ORM_${invoiceNum}_${client.companyName.replace(/\s+/g, '_')}.pdf`,
                         content: pdfBuffer
                     }
                 ]
             });
+
 
             console.log("✅ Email y Factura PDF enviados correctamente.");
             res.status(200).send({ message: 'Correo con factura PDF enviado con éxito' });
