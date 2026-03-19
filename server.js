@@ -7,6 +7,13 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// Forzar preferencia de IPv4 para evitar errores de conexión (ENETUNREACH) en entornos sin IPv6 (como Render)
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
+
 
 const app = express();
 
@@ -25,6 +32,27 @@ const SECRET_KEY = process.env.SECRET_KEY;
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ Conexión a MongoDB exitosa'))
     .catch(err => console.error('❌ Error al conectar a MongoDB:', err.message));
+
+// --- Configuración de Correo (SMTP) ---
+const EMAIL_USER = (process.env.EMAIL_USER || "").trim().replace(/['"]/g, "");
+const EMAIL_PASS = (process.env.EMAIL_PASS || "").trim().replace(/['"]/g, "");
+
+// Transporter reutilizable para mayor eficiencia
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    },
+    tls: {
+        rejectUnauthorized: false
+    },
+    connectionTimeout: 10000,
+    family: 4 // Forzar IPv4 para evitar errores ENETUNREACH en hosts sin soporte IPv6 (como Render)
+});
+
 
 // ==============================
 // SCHEMAS
@@ -405,36 +433,38 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
             <div style="background: #f1f5f9; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
                 <h4 style="color: #0f172a; margin-top: 0; font-size: 16px;">¿Qué te ha parecido nuestro servicio? ⭐⭐⭐⭐⭐</h4>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6; max-width: 400px; margin: 10px auto 20px;">Nos ayuda enormemente que valores el esfuerzo y dedicación que ponemos en tu negocio dejando una pequeña reseña en Google.</p>
-                <!-- Aquí reemplazar el hipervínculo con el enlace real de Google Reviews -->
-                <a href="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK/review" style="color: #0284c7; text-decoration: none; font-weight: 700; font-size: 15px; background: white; padding: 10px 20px; border-radius: 8px; border: 1px solid #cbd5e1; display: inline-block;">Dejar una reseña en Google</a>
+                <a href="https://g.page/r/CYg2hQ_ECr6fEBM/review" style="color: #0284c7; text-decoration: none; font-weight: 700; font-size: 15px; background: white; padding: 10px 20px; border-radius: 8px; border: 1px solid #cbd5e1; display: inline-block;">Dejar una reseña en Google</a>
             </div>
         </div>
         `;
 
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            // Modo Demo: Simula el envío exitoso si no hay credenciales (para evitar romper la UI mientras el admin las consigue)
-            console.log("Mock Email Sent to", client.email);
-            return res.status(200).send({ message: 'Envío simulado (Falta configuración SMTP en Servidor). Muestra el diseño.' });
+        // --- DIAGNÓSTICO ---
+        console.log(`--- Intento de envío ---`);
+        console.log(`Email User: ${EMAIL_USER || "NO DEFINIDO"}`);
+        console.log(`Email Pass longitud: ${EMAIL_PASS.length}`);
+
+        if (!EMAIL_USER || !EMAIL_PASS) {
+            console.log("⚠️ Faltan credenciales SMTP. Abortando.");
+            return res.status(200).send({ message: 'Envío simulado (Falta configuración SMTP en Servidor).' });
         }
 
-        const transporter = nodemailer.createTransport({
-            service: 'gmail', // Requiere contraseña de aplicación de Google
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            }
-        });
-
-        await transporter.sendMail({
-            from: `"ORM Cristales" <${process.env.EMAIL_USER}>`,
-            to: client.email,
-            subject: `Facturación y Resumen Mensual - ORM Cristales`,
-            html: htmlContent
-        });
-
-        res.status(200).send({ message: 'Correo enviado con éxito' });
+        try {
+            console.log("Enviando email...");
+            await transporter.sendMail({
+                from: `"ORM Cristales" <${EMAIL_USER}>`,
+                to: client.email,
+                subject: `Facturación y Resumen Mensual - ORM Cristales`,
+                html: htmlContent
+            });
+            console.log("✅ Email enviado correctamente.");
+            res.status(200).send({ message: 'Correo enviado con éxito' });
+        } catch (mailError) {
+            console.error("❌ Error en el proceso de correo:", mailError);
+            res.status(500).send({ message: 'Error en el servidor de correo', error: mailError.message });
+        }
     } catch (error) {
-        res.status(500).send({ message: 'Error al enviar el correo', error: error.message });
+        console.error("❌ Error General en /invoice-email:", error);
+        res.status(500).send({ message: 'Error al procesar la solicitud', error: error.message });
     }
 });
 
