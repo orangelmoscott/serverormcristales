@@ -8,8 +8,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const dns = require('dns');
+const PDFDocument = require('pdfkit');
 
 // Forzar preferencia de IPv4 para evitar errores de conexión (ENETUNREACH) en entornos sin IPv6 (como Render)
+
 if (dns.setDefaultResultOrder) {
     dns.setDefaultResultOrder('ipv4first');
 }
@@ -450,18 +452,87 @@ app.post('/clients/:id/invoice-email', authenticate, adminOnly, async (req, res)
         }
 
         try {
-            console.log("Enviando email...");
+            console.log("Generando PDF de la factura...");
+            
+            // --- GENERACIÓN DEL PDF (In-Memory Buffer) ---
+            const doc = new PDFDocument({ margin: 50, size: 'A4' });
+            let buffers = [];
+            doc.on('data', buffers.push.bind(buffers));
+            
+            const pdfPromise = new Promise((resolve) => {
+                doc.on('end', () => {
+                    resolve(Buffer.concat(buffers));
+                });
+            });
+
+            // HEADER / LOGO (Placeholder o Texto)
+            doc.fillColor("#0284c7").fontSize(20).text("ORM CRISTALES", { align: 'right' });
+            doc.fillColor("#475569").fontSize(10).text("Limpiezas Industriales y Mantenimiento", { align: 'right' });
+            doc.moveDown();
+
+            // INFO VENDEDOR / CLIENTE
+            doc.fillColor("#0f172a").fontSize(12).text("DATOS DE LA EMPRESA:", { underline: true });
+            doc.fontSize(10).text("ORM Cristales S.L.");
+            doc.text("Calle Limpieza 123, 28001 Madrid");
+            doc.text("NIF: B00000000");
+            doc.moveDown();
+
+            doc.fontSize(12).text("DATOS DEL CLIENTE:", { underline: true });
+            doc.fontSize(10).text(`Cliente: ${client.companyName}`);
+            doc.text(`NIF/CIF: ${client.nif || 'No especificado'}`);
+            doc.text(`Dirección: ${client.address || 'No especificada'}`);
+            doc.moveDown();
+
+            // TABLA DE SERVICIOS (Simulada con líneas)
+            doc.rect(50, doc.y, 500, 20).fill("#f1f5f9");
+            doc.fillColor("#0f172a").fontSize(10).text("Concepto", 60, doc.y - 15);
+            doc.text("Frecuencia", 300, doc.y - 15);
+            doc.text("Total", 480, doc.y - 15);
+            doc.moveDown(0.5);
+
+            doc.text(`Limpieza de ${client.serviceType}`, 60, doc.y);
+            doc.text(`${client.frequency}`, 300, doc.y);
+            doc.text(`${base.toFixed(2)}€`, 480, doc.y);
+            doc.moveDown();
+
+            // TOTALES
+            doc.moveTo(350, doc.y).lineTo(550, doc.y).stroke("#e2e8f0");
+            doc.moveDown(0.5);
+            doc.text("Base Imponible:", 350, doc.y);
+            doc.text(`${base.toFixed(2)}€`, 480, doc.y);
+            doc.moveDown();
+            doc.text("IVA (21%):", 350, doc.y);
+            doc.text(`${iva.toFixed(2)}€`, 480, doc.y);
+            doc.moveDown();
+            doc.fillColor("#0ea5e9").fontSize(14).text("TOTAL FACTURA:", 350, doc.y);
+            doc.text(`${total.toFixed(2)}€`, 480, doc.y);
+
+            doc.moveDown(2);
+            doc.fillColor("#64748b").fontSize(9).text("Gracias por su confianza. Esta es una factura generada automáticamente.", { align: 'center', italic: true });
+
+            doc.end();
+            const pdfBuffer = await pdfPromise;
+
+            // --- ENVÍO DEL EMAIL CON ADJUNTO ---
+            console.log("Enviando email con adjunto...");
             await transporter.sendMail({
                 from: `"ORM Cristales" <${EMAIL_USER}>`,
                 to: client.email,
-                subject: `Facturación y Resumen Mensual - ORM Cristales`,
-                html: htmlContent
+                subject: `Factura ${capitalize(dateStr)} - ORM Cristales`,
+                html: htmlContent,
+                attachments: [
+                    {
+                        filename: `Factura_ORM_${client.companyName.replace(/\s+/g, '_')}_${dateStr.replace(/\s+/g, '_')}.pdf`,
+                        content: pdfBuffer
+                    }
+                ]
             });
-            console.log("✅ Email enviado correctamente.");
-            res.status(200).send({ message: 'Correo enviado con éxito' });
+
+            console.log("✅ Email y Factura PDF enviados correctamente.");
+            res.status(200).send({ message: 'Correo con factura PDF enviado con éxito' });
         } catch (mailError) {
-            console.error("❌ Error en el proceso de correo:", mailError);
-            res.status(500).send({ message: 'Error en el servidor de correo', error: mailError.message });
+            console.error("❌ Error en el proceso de correo/pdf:", mailError);
+            res.status(500).send({ message: 'Error en el servidor de correo o generación de PDF', error: mailError.message });
         }
     } catch (error) {
         console.error("❌ Error General en /invoice-email:", error);
