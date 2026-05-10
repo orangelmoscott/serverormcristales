@@ -1,5 +1,6 @@
 // server.js — ORM Cristales API v2
 // Sistema con roles (admin/cristalero), asignaciones de rutas diarias y verificación
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
@@ -257,7 +258,8 @@ app.post('/login', async (req, res) => {
             userId: user._id
         });
     } catch (error) {
-        res.status(500).send({ message: 'Error en el servidor' });
+        console.error('❌ Error detallado en /login:', error);
+        res.status(500).send({ message: 'Error en el servidor', error: error.message });
     }
 });
 
